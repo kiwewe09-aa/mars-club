@@ -125,6 +125,20 @@
         .table-status { font-size:0.8rem; color:#888; }
         .table-card.occupied .table-status { color:var(--danger); }
         .table-card.reserved .table-status { color:var(--warning); }
+        .new-order-badge { position:fixed; top:20px; left:50%; transform:translateX(-50%); background:var(--danger); color:white; padding:12px 24px; border-radius:30px; cursor:pointer; display:none; z-index:500; box-shadow:0 4px 20px rgba(231,76,60,0.4); }
+        .new-order-badge.show { display:block; animation:bounceIn 0.5s; }
+        @keyframes bounceIn { from { transform:translateX(-50%) scale(0.8); opacity:0; } to { transform:translateX(-50%) scale(1); opacity:1; } }
+        .qr-order-card { background:var(--darker); border-radius:16px; padding:20px; margin-bottom:15px; border-right:4px solid var(--danger); }
+        .qr-order-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; }
+        .qr-order-table { font-weight:bold; color:var(--text); }
+        .qr-order-time { font-size:0.8rem; color:#888; }
+        .qr-order-status-new { background:rgba(231,76,60,0.2); color:var(--danger); padding:4px 12px; border-radius:20px; font-size:0.8rem; }
+        .qr-order-items { margin-bottom:15px; }
+        .qr-order-item { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--card); }
+        .qr-order-footer { display:flex; justify-content:space-between; align-items:center; }
+        .qr-order-total { font-weight:bold; color:var(--text); }
+        .qr-order-actions { display:flex; gap:8px; }
+        .empty-state { text-align:center; padding:40px; color:#888; }
     </style>
 </head>
 <body>
@@ -132,7 +146,7 @@
     <div class="login-box">
         <h1>🚀 مارس کلاب</h1>
         <p>به پنل مدیریت خوش آمدید</p>
-        <p style="font-size:0.7rem;color:#555;">v2.1 - Firebase Auto-Sync</p>
+        <p style="font-size:0.7rem;color:#555;">v3.0 - Clean Build</p>
         <input type="password" id="login-password" placeholder="رمز عبور را وارد کنید" onkeypress="if(event.key==='Enter')doLogin()">
         <button onclick="doLogin()">ورود</button>
         <div class="login-error" id="login-error">رمز عبور اشتباه است!</div>
@@ -186,7 +200,7 @@
                     <h1>📊 داشبورد</h1>
                     <div class="top-bar-actions">
                         <button class="btn btn-primary" onclick="refreshDashboard()">🔄 بروزرسانی</button>
-                        <button class="btn btn-success manual-sync-btn" onclick="manualSyncOrders()">📥 دریافت سفارشات</button>
+                        <button class="btn btn-success" onclick="manualSyncOrders()">📥 دریافت سفارشات</button>
                     </div>
                 </div>
                 <div class="stats-grid">
@@ -203,13 +217,23 @@
                     <div class="stat-card">
                         <h3>🪑 میزهای اشغال</h3>
                         <div class="value" id="stat-tables">0</div>
-                        <div class="change">از 20 میز</div>
+                        <div class="change">از 7 میز</div>
                     </div>
                     <div class="stat-card">
                         <h3>⭐ محصولات</h3>
                         <div class="value" id="stat-products">0</div>
                         <div class="change">آیتم در منو</div>
                     </div>
+                </div>
+                <div class="card" id="new-orders-card" style="display:none;">
+                    <div class="card-header">
+                        <span class="card-title">🔔 سفارشات جدید مشتری</span>
+                        <button class="btn btn-sm btn-success" onclick="markAllOrdersDone()">✅ همه تکمیل شد</button>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>شماره</th><th>میز</th><th>آیتم‌ها</th><th>مبلغ</th><th>زمان</th><th>عملیات</th></tr></thead>
+                        <tbody id="new-orders-tbody"></tbody>
+                    </table>
                 </div>
                 <div class="card">
                     <div class="card-header"><span class="card-title">📈 نمودار فروش هفتگی</span></div>
@@ -298,25 +322,37 @@
                 </div>
             </div>
 
+            <div id="tab-qr-orders" class="tab-content">
+                <div class="top-bar">
+                    <h1>📱 سفارشات QR</h1>
+                    <button class="btn btn-primary" onclick="refreshQROrders()">🔄 بروزرسانی</button>
+                    <button class="btn btn-success" onclick="markAllQRDone()" style="margin-right:10px;">✅ همه تکمیل شد</button>
+                </div>
+                <div id="qr-orders-empty" class="empty-state">
+                    <div style="font-size:3rem;margin-bottom:15px;">📭</div>
+                    <h3>هنوز سفارش جدیدی نیست</h3>
+                    <p>وقتی مشتری از طریق QR Code سفارش بده، اینجا نمایش داده میشه</p>
+                </div>
+                <div id="qr-orders-list"></div>
+            </div>
+
             <div id="tab-settings" class="tab-content">
                 <div class="top-bar"><h1>⚙️ تنظیمات</h1></div>
-
                 <div class="card" style="max-width:700px;">
                     <h3 style="margin-bottom:15px;">📱 تولید QR Code</h3>
-                    <p style="color:#888;margin-bottom:15px;">لینک کافه‌تون رو وارد کنید تا QR Code مشتری تولید بشه. مشتری با اسکن این کد وارد منوی آنلاین می‌شه.</p>
+                    <p style="color:#888;margin-bottom:15px;">لینک کافه‌تون رو وارد کنید تا QR Code مشتری تولید بشه.</p>
                     <div class="form-group">
                         <label>🔗 لینک کافه (URL)</label>
-                        <input type="text" id="qr-url-input" class="qr-url-input" placeholder="https://yourcafe.com/menu  یا  https://yourcafe.github.io/menu.html">
+                        <input type="text" id="qr-url-input" class="qr-url-input" placeholder="https://yourcafe.github.io/menu.html">
                     </div>
                     <div class="form-group">
                         <label>🪑 تولید QR Code برای میزها</label>
                         <select id="qr-table-select">
                             <option value="general">🌐 لینک عمومی (بدون میز)</option>
-                            <option value="all">📋 همه میزها (1 تا 20)</option>
+                            <option value="all">📋 همه میزها (1 تا 7)</option>
                         </select>
                     </div>
                     <button class="btn btn-primary" onclick="generateQRCodes()">📱 تولید QR Code</button>
-
                     <div id="qr-results" style="margin-top:25px; display:none;">
                         <div class="card-header" style="margin-bottom:15px;">
                             <span class="card-title">📱 QR Code‌های تولید شده</span>
@@ -324,14 +360,12 @@
                         <div class="qr-grid" id="qr-grid"></div>
                     </div>
                 </div>
-
                 <div class="card" style="max-width:700px; margin-top:20px;">
                     <h3 style="margin-bottom:15px;">🔥 اتصال Firebase</h3>
                     <div class="form-group"><label>API Key</label><input type="text" id="fb-apikey" placeholder="AIzaSy..."></div>
                     <div class="form-group"><label>Database URL</label><input type="text" id="fb-url" placeholder="https://your-app.firebaseio.com"></div>
                     <button class="btn btn-primary" onclick="connectFirebase()">🔗 اتصال</button>
                     <button class="btn btn-success" onclick="manualSyncAll()" style="margin-right:10px;">🔄 همگام‌سازی دستی</button>
-                    <button class="btn btn-warning" onclick="testFirebaseWrite()" style="margin-right:10px;">🧪 تست ارسال</button>
                 </div>
             </div>
         </main>
@@ -432,7 +466,19 @@ const defaultProducts = [
     { id: 15, name: "هات داگ", price: 165000, category: "food", emoji: "🌭" },
 ];
 
-let products = JSON.parse(localStorage.getItem('mars_products')) || defaultProducts;
+function loadProducts() {
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem('mars_products')); } catch(e) {}
+    if (stored && Array.isArray(stored) && stored.length > 0) {
+        products = stored;
+    } else {
+        products = defaultProducts.slice();
+        saveProducts();
+    }
+}
+
+let products = [];
+loadProducts();
 
 function normalizeArray(data) {
     if (Array.isArray(data)) return data;
@@ -480,8 +526,6 @@ function saveOrders() {
     localStorage.setItem('mars_orders', JSON.stringify(orders)); 
 }
 
-
-
 // ===================== AUTH =====================
 function doLogin() {
     const pass = document.getElementById('login-password').value;
@@ -502,8 +546,7 @@ function checkAuth() {
         initTables();
         initReservations();
         initOrders();
-        // Load products from local or default
-        products = JSON.parse(localStorage.getItem('mars_products')) || defaultProducts;
+        loadProducts();
         autoConnectFirebase();
         initCustomer();
     }
@@ -522,6 +565,10 @@ function switchTab(tabName) {
     if (tabName === 'orders') { renderOrderMenu(); updateTableSelect(); }
     if (tabName === 'reservations') { renderTables(); renderReservations(); }
     if (tabName === 'qr-orders') renderQROrders();
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
 }
 
 // ===================== DASHBOARD =====================
@@ -543,14 +590,11 @@ function renderNewOrders() {
     const tbody = document.getElementById('new-orders-tbody');
     const card = document.getElementById('new-orders-card');
     if (!tbody || !card) return;
-
     const newOrders = orders.filter(o => o.status === 'جدید');
-
     if (newOrders.length === 0) {
         card.style.display = 'none';
         return;
     }
-
     card.style.display = 'block';
     tbody.innerHTML = newOrders.map(o => {
         var items = o.items ? o.items.map(i => i.name + ' x' + i.qty).join(', ') : '-';
@@ -589,16 +633,13 @@ function renderQROrders() {
     const list = document.getElementById('qr-orders-list');
     const empty = document.getElementById('qr-orders-empty');
     if (!list || !empty) return;
-
     var qrOrders = orders.filter(o => o.status === 'جدید');
     qrOrders.sort(function(a, b) { return b.id - a.id; });
-
     if (qrOrders.length === 0) {
         list.innerHTML = '';
         empty.style.display = 'block';
         return;
     }
-
     empty.style.display = 'none';
     list.innerHTML = qrOrders.map(o => {
         var itemsHtml = '';
@@ -607,7 +648,6 @@ function renderQROrders() {
         }
         return '<div class="qr-order-card" id="qr-card-' + o.id + '"><div class="qr-order-header"><div><span class="qr-order-table">🪑 ' + (o.table || 'آنلاین') + '</span><div class="qr-order-time">' + new Date(o.date).toLocaleString('fa-IR') + '</div></div><span class="qr-order-status-new">جدید</span></div><div class="qr-order-items">' + itemsHtml + '</div><div class="qr-order-footer"><div class="qr-order-total">💰 ' + (o.total || 0).toLocaleString() + ' تومان</div><div class="qr-order-actions"><button class="btn btn-sm btn-success" onclick="markQRDone(' + o.id + ')">✅ تکمیل شد</button><button class="btn btn-sm btn-danger" onclick="deleteQROrder(' + o.id + ')">🗑️ حذف</button></div></div></div>';
     }).join('');
-
     updateQRBadge();
 }
 
@@ -851,11 +891,18 @@ function initCustomer() {
         info.style.display = 'block';
         document.getElementById('customer-table').value = tableNum;
     }
-    // Load products if empty (new device)
     if (!products || products.length === 0) {
-        products = JSON.parse(localStorage.getItem('mars_products')) || defaultProducts;
+        loadProducts();
     }
+    renderCustomerMenu();
+}
+
+function renderCustomerMenu() {
     const menu = document.getElementById('customer-menu');
+    if (!products || products.length === 0) {
+        menu.innerHTML = '<div class="empty-state"><div style="font-size:3rem;">☕</div><h3>منو در حال بارگذاری...</h3></div>';
+        return;
+    }
     menu.innerHTML = products.map(p => '<div class="customer-menu-item" onclick="addToCustomerCart(' + p.id + ')"><div class="emoji">' + p.emoji + '</div><div class="name">' + p.name + '</div><div class="price">' + p.price.toLocaleString() + ' تومان</div></div>').join('');
 }
 
@@ -908,6 +955,10 @@ function renderCustomerCart() {
     document.getElementById('customer-cart-total').textContent = total.toLocaleString() + ' تومان';
 }
 
+function dismissNewOrder() {
+    document.getElementById('new-order-badge').classList.remove('show');
+}
+
 // ===================== QR CODE =====================
 function generateQRCodes() {
     const baseUrl = document.getElementById('qr-url-input').value.trim();
@@ -915,12 +966,9 @@ function generateQRCodes() {
     const mode = document.getElementById('qr-table-select').value;
     const resultsDiv = document.getElementById('qr-results');
     const gridDiv = document.getElementById('qr-grid');
-
     if (!baseUrl) { showToast('لطفاً لینک کافه را وارد کنید', true); return; }
-
     gridDiv.innerHTML = '';
     resultsDiv.style.display = 'block';
-
     if (mode === 'general') {
         let url = baseUrl;
         if (!url.includes('#')) url += '#customer';
@@ -928,304 +976,4 @@ function generateQRCodes() {
     } else if (mode === 'all') {
         for (let i = 1; i <= TOTAL_TABLES; i++) {
             let tableUrl = baseUrl;
-            if (!tableUrl.includes('#')) tableUrl += '#customer';
-            if (tableUrl.indexOf('?') === -1) {
-                tableUrl = tableUrl.replace('#customer', '?table=' + i + '#customer');
-            } else {
-                tableUrl += '&table=' + i;
-            }
-            createQRCard(gridDiv, tableUrl, 'میز ' + i, 'مستقیم به منوی میز ' + i);
-        }
-    }
-    showToast('QR Code‌ها تولید شدند ✅');
-}
-
-function createQRCard(container, url, title, subtitle) {
-    const cardId = 'qr-' + Math.random().toString(36).substr(2, 9);
-    const card = document.createElement('div');
-    card.className = 'qr-card';
-    card.innerHTML = '<div class="qr-card-title">' + title + '</div><div id="' + cardId + '"></div><div class="qr-card-subtitle">' + subtitle + '</div><div class="qr-actions"><button class="btn btn-sm btn-primary" onclick="downloadQR(\'' + cardId + '\', \'' + title + '\')">💾 دانلود</button><button class="btn btn-sm btn-info" onclick="copyQRUrl(\'' + url + '\')">📋 کپی لینک</button></div>';
-    container.appendChild(card);
-    setTimeout(() => {
-        new QRCode(document.getElementById(cardId), {
-            text: url, width: 180, height: 180,
-            colorDark: '#1a1a2e', colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
-    }, 100);
-}
-
-function downloadQR(containerId, title) {
-    const container = document.getElementById(containerId);
-    const img = container.querySelector('img');
-    if (!img) { showToast('لطفاً چند ثانیه صبر کنید', true); return; }
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 400; canvas.height = 480;
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 400, 480);
-    ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, 400, 60);
-    ctx.fillStyle = '#e94560'; ctx.font = 'bold 24px Vazirmatn, sans-serif';
-    ctx.textAlign = 'center'; ctx.fillText('🚀 مارس کلاب', 200, 40);
-    const qrImg = new Image();
-    qrImg.onload = function() {
-        ctx.drawImage(qrImg, 60, 80, 280, 280);
-        ctx.fillStyle = '#333'; ctx.font = 'bold 20px Vazirmatn, sans-serif';
-        ctx.fillText(title, 200, 390);
-        ctx.fillStyle = '#666'; ctx.font = '14px Vazirmatn, sans-serif';
-        ctx.fillText('اسکن کنید و سفارش دهید', 200, 420);
-        ctx.fillStyle = '#e94560'; ctx.font = '12px Vazirmatn, sans-serif';
-        ctx.fillText('Mars Club Coffee', 200, 450);
-        const link = document.createElement('a');
-        link.download = 'mars-club-qr-' + title.replace(/\s+/g, '-') + '.png';
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-        showToast('QR Code دانلود شد ✅');
-    };
-    qrImg.src = img.src;
-}
-
-function copyQRUrl(url) {
-    navigator.clipboard.writeText(url).then(() => showToast('لینک کپی شد ✅'))
-    .catch(() => showToast('لینک کپی شد ✅'));
-}
-
-// ===================== FIREBASE =====================
-function connectFirebase() {
-    const API_KEY = "AIzaSyChTpEKLMyIcNyRJtU-eGTHCkKxuuEzwgI";
-    const DB_URL = "https://marsclub-default-rtdb.firebaseio.com";
-    try {
-        if (!firebase.apps || firebase.apps.length === 0) {
-            const config = { apiKey: API_KEY, databaseURL: DB_URL };
-            firebase.initializeApp(config);
-        }
-        db = firebase.database();
-        firebaseConnected = true;
-        document.getElementById('fb-status').textContent = '🟢 آنلاین (Firebase)';
-        if (document.getElementById('fb-apikey')) document.getElementById('fb-apikey').value = API_KEY;
-        if (document.getElementById('fb-url')) document.getElementById('fb-url').value = DB_URL;
-        showToast('اتصال Firebase برقرار شد ✅');
-        syncFromFirebase();
-    } catch (e) {
-        showToast('خطا در اتصال: ' + e.message, true);
-    }
-}
-
-function autoConnectFirebase() {
-    document.getElementById('fb-status').textContent = '🟢 آنلاین (REST API)';
-    pullAllDataREST();
-    startRESTPolling();
-    syncPendingOrders();
-}
-
-function initApp() {
-    initTables();
-    initReservations();
-    initOrders();
-    autoConnectFirebase();
-    updateQRBadge();
-    switchTab('dashboard');
-}
-
-function initData() {
-    initTables();
-    initReservations();
-    initOrders();
-    autoConnectFirebase();
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
-    const savedQrUrl = localStorage.getItem('mars_qr_url');
-    if (savedQrUrl && document.getElementById('qr-url-input')) {
-        document.getElementById('qr-url-input').value = savedQrUrl;
-    }
-    const now = new Date();
-    const dateInput = document.getElementById('res-date');
-    const timeInput = document.getElementById('res-time');
-    if (dateInput) dateInput.value = now.toISOString().split('T')[0];
-    if (timeInput) timeInput.value = now.toTimeString().slice(0,5);
-});
-
-window.addEventListener('load', () => {
-    if (window.location.hash === '#customer' && !firebaseConnected) {
-        autoConnectFirebase();
-    }
-});
-var FB_DB_URL = "https://marsclub-default-rtdb.firebaseio.com";
-var pendingOrders = JSON.parse(localStorage.getItem('mars_pending_orders')) || [];
-var restPollingInterval = null;
-
-// ===================== PURE REST API =====================
-function restGet(path) {
-    return fetch(FB_DB_URL + path + '.json').then(function(r) { return r.json(); });
-}
-
-function restPut(path, data) {
-    return fetch(FB_DB_URL + path + '.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    });
-}
-
-function restDelete(path) {
-    return fetch(FB_DB_URL + path + '.json', { method: 'DELETE' });
-}
-
-function syncAllDataREST() {
-    // Push local data to Firebase
-    syncToFirebase('products', products);
-    syncToFirebase('tables', tables);
-    syncToFirebase('reservations', reservations);
-    syncToFirebase('orders', orders);
-}
-
-function pullAllDataREST() {
-    showToast('⏳ در حال دریافت...');
-    Promise.all([
-        restGet('/marsclub/products'),
-        restGet('/marsclub/tables'),
-        restGet('/marsclub/reservations'),
-        restGet('/marsclub/orders')
-    ]).then(function(results) {
-        if (results[0]) { products = normalizeArray(results[0]); localStorage.setItem('mars_products', JSON.stringify(products)); }
-        if (results[1]) { tables = normalizeArray(results[1]); localStorage.setItem('mars_tables', JSON.stringify(tables)); }
-        if (results[2]) { reservations = normalizeArray(results[2]); localStorage.setItem('mars_reservations', JSON.stringify(reservations)); }
-        if (results[3]) { orders = normalizeArray(results[3]); localStorage.setItem('mars_orders', JSON.stringify(orders)); }
-
-        refreshDashboard();
-        renderTables();
-        renderReservations();
-        renderQROrders();
-        updateQRBadge();
-        showToast('✅ دیتا بروز شد');
-    }).catch(function(e) {
-        showToast('❌ خطا در دریافت: ' + e.message, true);
-    });
-}
-
-function startRESTPolling() {
-    if (restPollingInterval) clearInterval(restPollingInterval);
-    restPollingInterval = setInterval(function() {
-        restGet('/marsclub/orders').then(function(data) {
-            if (data) {
-                var newOrders = normalizeArray(data);
-                var oldNewCount = orders.filter(function(o) { return o.status === 'جدید'; }).length;
-                orders = newOrders;
-                localStorage.setItem('mars_orders', JSON.stringify(orders));
-                var newNewCount = orders.filter(function(o) { return o.status === 'جدید'; }).length;
-                if (newNewCount > oldNewCount) {
-                    showToast('🛒 ' + (newNewCount - oldNewCount) + ' سفارش جدید!');
-                    document.getElementById('new-order-badge').classList.add('show');
-                }
-                updateQRBadge();
-                if (document.getElementById('qr-orders-list')) renderQROrders();
-                if (document.getElementById('stat-revenue')) refreshDashboard();
-                if (document.getElementById('recent-orders')) renderRecentOrders();
-            }
-        }).catch(function(e) { console.log('Poll error:', e); });
-    }, 3000);
-    console.log('REST polling active (3s)');
-}
-
-function syncToFirebase(path, data) {
-    restPut('/marsclub/' + path, data).catch(function(e) { console.log('Sync error:', e); });
-}
-
-function pushOrderToFirebase(order) {
-    var key = 'order_' + order.id;
-    restPut('/marsclub/orders/' + key, order).then(function() {
-        showToast('✅ سفارش ثبت شد');
-        removePendingOrder(order.id);
-    }).catch(function(e) {
-        showToast('⚠️ ذخیره محلی شد', true);
-        addPendingOrder(order);
-    });
-}
-
-function updateTableInFirebase(table) {
-    restPut('/marsclub/tables/' + table.id, table).catch(function(e) { console.log('Table sync error:', e); });
-}
-
-function pushReservationToFirebase(res) {
-    var key = 'res_' + res.id;
-    restPut('/marsclub/reservations/' + key, res).catch(function(e) { console.log('Res sync error:', e); });
-}
-
-function addPendingOrder(order) {
-    if (!pendingOrders.find(function(o) { return o.id === order.id; })) {
-        pendingOrders.push(order);
-        localStorage.setItem('mars_pending_orders', JSON.stringify(pendingOrders));
-    }
-}
-
-function removePendingOrder(orderId) {
-    pendingOrders = pendingOrders.filter(function(o) { return o.id !== orderId; });
-    localStorage.setItem('mars_pending_orders', JSON.stringify(pendingOrders));
-}
-
-function syncPendingOrders() {
-    if (pendingOrders.length === 0) return;
-    console.log('Syncing ' + pendingOrders.length + ' pending orders...');
-    pendingOrders.slice().forEach(function(order) {
-        pushOrderToFirebase(order);
-    });
-}
-
-function pullOrdersFromREST() {
-    restGet('/marsclub/orders').then(function(data) {
-        if (data) {
-            orders = normalizeArray(data);
-            localStorage.setItem('mars_orders', JSON.stringify(orders));
-            if (document.getElementById('qr-orders-list')) renderQROrders();
-            if (document.getElementById('stat-revenue')) refreshDashboard();
-            if (document.getElementById('recent-orders')) renderRecentOrders();
-            updateQRBadge();
-        }
-    }).catch(function(e) { console.log('Pull error:', e); });
-}
-
-function autoConnectFirebase() {
-    document.getElementById('fb-status').textContent = '🟢 آنلاین (REST API)';
-    pullAllDataREST();
-    startRESTPolling();
-    syncPendingOrders();
-}
-
-function initApp() {
-    initTables();
-    initReservations();
-    initOrders();
-    autoConnectFirebase();
-    updateQRBadge();
-    switchTab('dashboard');
-}
-
-function initData() {
-    initTables();
-    initReservations();
-    initOrders();
-    autoConnectFirebase();
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
-    const savedQrUrl = localStorage.getItem('mars_qr_url');
-    if (savedQrUrl && document.getElementById('qr-url-input')) {
-        document.getElementById('qr-url-input').value = savedQrUrl;
-    }
-    const now = new Date();
-    const dateInput = document.getElementById('res-date');
-    const timeInput = document.getElementById('res-time');
-    if (dateInput) dateInput.value = now.toISOString().split('T')[0];
-    if (timeInput) timeInput.value = now.toTimeString().slice(0,5);
-});
-
-window.addEventListener('load', () => {
-    if (window.location.hash === '#customer' && !firebaseConnected) {
-        autoConnectFirebase();
-    }
-});
-</script>
-</body>
-</html>
+            if (!
